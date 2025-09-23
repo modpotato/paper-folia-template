@@ -5,7 +5,7 @@ plugins {
     id("io.github.goooler.shadow") version "8.1.7"
 }
 
-application.mainClass = "top.modpotato.PluginNameHere.Main"
+application.mainClass = "dev.modpotato.PluginNameHere.Main"
 
 group = project.property("group").toString()
 version = project.property("version").toString()

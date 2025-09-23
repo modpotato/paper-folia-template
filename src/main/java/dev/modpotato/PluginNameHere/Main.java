@@ -1,4 +1,4 @@
-package top.modpotato.PluginNameHere;
+package dev.modpotato.PluginNameHere;
 
 import org.bukkit.plugin.java.JavaPlugin;
 
