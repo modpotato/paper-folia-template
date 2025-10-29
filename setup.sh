@@ -13,8 +13,8 @@ echo ""
 # Get plugin information from user
 read -p "Enter your plugin name (e.g., MyAwesomePlugin): " PLUGIN_NAME
 read -p "Enter plugin description: " PLUGIN_DESC
-read -p "Enter plugin version [1.0.0]: " PLUGIN_VERSION
-PLUGIN_VERSION=${PLUGIN_VERSION:-1.0.0}
+read -p "Enter plugin version [INDEV]: " PLUGIN_VERSION
+PLUGIN_VERSION=${PLUGIN_VERSION:-INDEV}
 read -p "Enter author name: " PLUGIN_AUTHOR
 read -p "Enter group/package (e.g., com.example): " PLUGIN_GROUP
 
@@ -45,10 +45,10 @@ echo "Configuring plugin..."
 
 # Update gradle.properties
 echo "Updating gradle.properties..."
-sed -i "s|^group=.*|group=$PLUGIN_GROUP.$PLUGIN_PACKAGE|g" gradle.properties
-sed -i "s|^version=.*|version=$PLUGIN_VERSION|g" gradle.properties
-sed -i "s|^description=.*|description=$PLUGIN_DESC|g" gradle.properties
-sed -i "s|^author=.*|author=$PLUGIN_AUTHOR|g" gradle.properties
+sed -i "/^# Plugin settings/,/^# Dependency versions/ s|^group=.*|group=$PLUGIN_GROUP.$PLUGIN_PACKAGE|" gradle.properties
+sed -i "/^# Plugin settings/,/^# Dependency versions/ s|^version=.*|version=$PLUGIN_VERSION|" gradle.properties
+sed -i "/^# Plugin settings/,/^# Dependency versions/ s|^description=.*|description=$PLUGIN_DESC|" gradle.properties
+sed -i "/^# Plugin settings/,/^# Dependency versions/ s|^author=.*|author=$PLUGIN_AUTHOR|" gradle.properties
 
 # Update settings.gradle.kts
 echo "Updating settings.gradle.kts..."

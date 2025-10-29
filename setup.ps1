@@ -11,9 +11,9 @@ Write-Host ""
 # Get plugin information from user
 $PLUGIN_NAME = Read-Host "Enter your plugin name (e.g., MyAwesomePlugin)"
 $PLUGIN_DESC = Read-Host "Enter plugin description"
-$PLUGIN_VERSION = Read-Host "Enter plugin version [1.0.0]"
+$PLUGIN_VERSION = Read-Host "Enter plugin version [INDEV]"
 if ([string]::IsNullOrWhiteSpace($PLUGIN_VERSION)) {
-    $PLUGIN_VERSION = "1.0.0"
+    $PLUGIN_VERSION = "INDEV"
 }
 $PLUGIN_AUTHOR = Read-Host "Enter author name"
 $PLUGIN_GROUP = Read-Host "Enter group/package (e.g., com.example)"
@@ -45,12 +45,31 @@ Write-Host "Configuring plugin..." -ForegroundColor Green
 
 # Update gradle.properties
 Write-Host "Updating gradle.properties..." -ForegroundColor Yellow
-$gradleProps = Get-Content "gradle.properties" -Raw
-$gradleProps = $gradleProps -replace 'group=.*', "group=$PLUGIN_GROUP.$PLUGIN_PACKAGE"
-$gradleProps = $gradleProps -replace 'version=.*', "version=$PLUGIN_VERSION"
-$gradleProps = $gradleProps -replace 'description=.*', "description=$PLUGIN_DESC"
-$gradleProps = $gradleProps -replace 'author=.*', "author=$PLUGIN_AUTHOR"
-Set-Content "gradle.properties" -Value $gradleProps -NoNewline
+$gradleProps = Get-Content "gradle.properties"
+for ($i = 0; $i -lt $gradleProps.Length; $i++) {
+    if ($gradleProps[$i] -match '^# Plugin settings') {
+        # Found plugin settings section, update the next few lines
+        for ($j = $i + 1; $j -lt $gradleProps.Length; $j++) {
+            if ($gradleProps[$j] -match '^# Dependency versions') {
+                break
+            }
+            if ($gradleProps[$j] -match '^group=') {
+                $gradleProps[$j] = "group=$PLUGIN_GROUP.$PLUGIN_PACKAGE"
+            }
+            elseif ($gradleProps[$j] -match '^version=') {
+                $gradleProps[$j] = "version=$PLUGIN_VERSION"
+            }
+            elseif ($gradleProps[$j] -match '^description=') {
+                $gradleProps[$j] = "description=$PLUGIN_DESC"
+            }
+            elseif ($gradleProps[$j] -match '^author=') {
+                $gradleProps[$j] = "author=$PLUGIN_AUTHOR"
+            }
+        }
+        break
+    }
+}
+$gradleProps | Set-Content "gradle.properties"
 
 # Update settings.gradle.kts
 Write-Host "Updating settings.gradle.kts..." -ForegroundColor Yellow
