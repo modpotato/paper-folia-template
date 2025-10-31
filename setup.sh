@@ -17,6 +17,7 @@ read -p "Enter plugin version [INDEV]: " PLUGIN_VERSION
 PLUGIN_VERSION=${PLUGIN_VERSION:-INDEV}
 read -p "Enter author name: " PLUGIN_AUTHOR
 read -p "Enter group/package (e.g., com.example): " PLUGIN_GROUP
+read -p "Enter GitHub repository (owner/repo) [leave blank to disable check]: " GITHUB_REPO
 
 # Convert plugin name to lowercase for package name
 PLUGIN_PACKAGE=$(echo "$PLUGIN_NAME" | tr '[:upper:]' '[:lower:]')
@@ -32,6 +33,11 @@ echo "Version:        $PLUGIN_VERSION"
 echo "Author:         $PLUGIN_AUTHOR"
 echo "Group:          $PLUGIN_GROUP"
 echo "Package:        $PLUGIN_GROUP.$PLUGIN_PACKAGE"
+if [[ -n $GITHUB_REPO ]]; then
+    echo "Repo Check:     $GITHUB_REPO"
+else
+    echo "Repo Check:     disabled"
+fi
 echo ""
 read -p "Is this correct? (y/n): " CONFIRM
 
@@ -62,6 +68,18 @@ sed -i "s|relocate(\"com.tcoded.folialib\", \"\${project.property(\"group\")}.li
 # Update plugin.yml
 echo "Updating plugin.yml..."
 sed -i "s|main: .*|main: $PLUGIN_GROUP.$PLUGIN_PACKAGE.Main|g" src/main/resources/plugin.yml
+
+# Update GitHub Actions workflow
+WORKFLOW_FILE=".github/workflows/build.yml"
+if [[ -f $WORKFLOW_FILE ]]; then
+    echo "Updating GitHub Actions workflow..."
+    if [[ -n $GITHUB_REPO ]]; then
+        sed -i "s|if: github.repository == '.*'|if: github.repository == '$GITHUB_REPO'|g" "$WORKFLOW_FILE"
+    else
+        sed -i "/^[[:space:]]*if: github.repository == '.*'/d" "$WORKFLOW_FILE"
+    fi
+    sed -i "s|name: PluginNameHere-\${{ env.VERSION }}|name: $PLUGIN_NAME-\${{ env.VERSION }}|g" "$WORKFLOW_FILE"
+fi
 
 # Create new directory structure
 echo "Refactoring directory structure..."

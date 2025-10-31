@@ -17,6 +17,7 @@ if ([string]::IsNullOrWhiteSpace($PLUGIN_VERSION)) {
 }
 $PLUGIN_AUTHOR = Read-Host "Enter author name"
 $PLUGIN_GROUP = Read-Host "Enter group/package (e.g., com.example)"
+$GITHUB_REPO = Read-Host "Enter GitHub repository (owner/repo) [leave blank to disable check]"
 
 # Convert plugin name to lowercase for package name
 $PLUGIN_PACKAGE = $PLUGIN_NAME.ToLower()
@@ -32,6 +33,11 @@ Write-Host "Version:        $PLUGIN_VERSION" -ForegroundColor White
 Write-Host "Author:         $PLUGIN_AUTHOR" -ForegroundColor White
 Write-Host "Group:          $PLUGIN_GROUP" -ForegroundColor White
 Write-Host "Package:        $PLUGIN_GROUP.$PLUGIN_PACKAGE" -ForegroundColor White
+if ([string]::IsNullOrWhiteSpace($GITHUB_REPO)) {
+    Write-Host "Repo Check:     disabled" -ForegroundColor White
+} else {
+    Write-Host "Repo Check:     $GITHUB_REPO" -ForegroundColor White
+}
 Write-Host ""
 $CONFIRM = Read-Host "Is this correct? (y/n)"
 
@@ -89,6 +95,28 @@ Write-Host "Updating plugin.yml..." -ForegroundColor Yellow
 $pluginYml = Get-Content "src\main\resources\plugin.yml" -Raw
 $pluginYml = $pluginYml -replace 'main: .*', "main: $PLUGIN_GROUP.$PLUGIN_PACKAGE.Main"
 Set-Content "src\main\resources\plugin.yml" -Value $pluginYml -NoNewline
+
+# Update GitHub Actions workflow
+$workflowPath = ".github/workflows/build.yml"
+if (Test-Path $workflowPath) {
+    Write-Host "Updating GitHub Actions workflow..." -ForegroundColor Yellow
+    $workflowLines = Get-Content $workflowPath
+    $updatedWorkflow = @()
+    foreach ($line in $workflowLines) {
+        if ($line -match '^\s*if:\s+github\.repository ==') {
+            if (-not [string]::IsNullOrWhiteSpace($GITHUB_REPO)) {
+                $updatedWorkflow += "    if: github.repository == '$GITHUB_REPO'"
+            }
+            continue
+        }
+        if ($line -match '^\s*name:\s*PluginNameHere-\$\{\{ env\.VERSION \}\}') {
+            $updatedWorkflow += "        name: $PLUGIN_NAME-" + '${{ env.VERSION }}'
+            continue
+        }
+        $updatedWorkflow += $line
+    }
+    $updatedWorkflow | Set-Content $workflowPath
+}
 
 # Create new directory structure
 Write-Host "Refactoring directory structure..." -ForegroundColor Yellow
