@@ -20,6 +20,7 @@ java {
 repositories {
     mavenCentral()
     maven("https://jitpack.io")
+    maven("https://repo.tcoded.com/releases")
     maven("https://repo.papermc.io/repository/maven-public/")
 }
 
@@ -30,7 +31,7 @@ dependencies {
     
     compileOnly("net.kyori:adventure-api:${project.property("adventureVersion")}")
 
-    implementation("com.github.technicallycoded:FoliaLib:main-SNAPSHOT")
+    implementation("com.tcoded.folialib:FoliaLib:0.5.1")
 }
 
 tasks {
