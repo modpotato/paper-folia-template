@@ -3,35 +3,133 @@
 
 $ErrorActionPreference = "Stop"
 
+# =========================================
+# Sanitization and Validation Functions
+# =========================================
+
+# Sanitize a string into a valid Java identifier segment
+# - Removes leading/trailing whitespace
+# - Replaces spaces and invalid chars with nothing
+# - Ensures it starts with a letter (prepends 'x' if needed)
+# - Optionally converts to lowercase for package names
+function Sanitize-JavaIdentifier {
+    param(
+        [string]$Input,
+        [bool]$ToLowerCase = $true
+    )
+    
+    # Trim leading/trailing whitespace
+    $result = $Input.Trim()
+    
+    # Remove all characters that are not alphanumeric or underscore
+    $result = $result -replace '[^a-zA-Z0-9_]', ''
+    
+    # Ensure it starts with a letter (prepend 'x' if starts with digit or underscore)
+    if ($result -match '^[^a-zA-Z]') {
+        $result = "x$result"
+    }
+    
+    # Convert to lowercase if requested
+    if ($ToLowerCase) {
+        $result = $result.ToLower()
+    }
+    
+    return $result
+}
+
+# Validate and sanitize a Java package group (e.g., com.example)
+# Each segment must be a valid Java identifier
+function Sanitize-JavaGroup {
+    param(
+        [string]$Input
+    )
+    
+    # Trim leading/trailing whitespace
+    $trimmed = $Input.Trim()
+    
+    # Split by dots and sanitize each segment
+    $segments = $trimmed.Split('.')
+    $resultSegments = @()
+    
+    foreach ($segment in $segments) {
+        $sanitized = Sanitize-JavaIdentifier -Input $segment -ToLowerCase $true
+        if (-not [string]::IsNullOrWhiteSpace($sanitized)) {
+            $resultSegments += $sanitized
+        }
+    }
+    
+    # If empty, use a default
+    if ($resultSegments.Count -eq 0) {
+        return "com.example"
+    }
+    
+    return $resultSegments -join '.'
+}
+
+# Escape special characters for PowerShell regex patterns
+# Escapes: \ . * + ? [ ] ( ) { } ^ $ | 
+function Escape-RegexPattern {
+    param(
+        [string]$Input
+    )
+    return [regex]::Escape($Input)
+}
+
+# Escape special characters for PowerShell regex replacement strings
+# In PowerShell -replace, $ and \ have special meaning in replacement
+function Escape-RegexReplacement {
+    param(
+        [string]$Input
+    )
+    # Escape $ as $$ and \ as \\
+    $result = $Input -replace '\$', '$$$$'
+    return $result
+}
+
 Write-Host "=========================================" -ForegroundColor Cyan
 Write-Host "Paper/Folia Plugin Template Setup" -ForegroundColor Cyan
 Write-Host "=========================================" -ForegroundColor Cyan
 Write-Host ""
 
 # Get plugin information from user
-$PLUGIN_NAME = Read-Host "Enter your plugin name (e.g., MyAwesomePlugin)"
+$PLUGIN_NAME_RAW = Read-Host "Enter your plugin name (e.g., MyAwesomePlugin)"
 $PLUGIN_DESC = Read-Host "Enter plugin description"
 $PLUGIN_VERSION = Read-Host "Enter plugin version [INDEV]"
 if ([string]::IsNullOrWhiteSpace($PLUGIN_VERSION)) {
     $PLUGIN_VERSION = "INDEV"
 }
 $PLUGIN_AUTHOR = Read-Host "Enter author name"
-$PLUGIN_GROUP = Read-Host "Enter group/package (e.g., com.example)"
+$PLUGIN_GROUP_RAW = Read-Host "Enter group/package (e.g., com.example)"
 $GITHUB_REPO = Read-Host "Enter GitHub repository (owner/repo) [leave blank to disable check]"
 
-# Convert plugin name to lowercase for package name
+# Sanitize plugin name for use in Java identifiers (preserve case for display)
+$PLUGIN_NAME = Sanitize-JavaIdentifier -Input $PLUGIN_NAME_RAW -ToLowerCase $false
+# Convert sanitized plugin name to lowercase for package name
 $PLUGIN_PACKAGE = $PLUGIN_NAME.ToLower()
+# Sanitize group/package
+$PLUGIN_GROUP = Sanitize-JavaGroup -Input $PLUGIN_GROUP_RAW
+
+# Validate that we have usable values
+if ([string]::IsNullOrWhiteSpace($PLUGIN_NAME)) {
+    Write-Host "Error: Plugin name could not be sanitized to a valid Java identifier." -ForegroundColor Red
+    exit 1
+}
+
+if ([string]::IsNullOrWhiteSpace($PLUGIN_PACKAGE)) {
+    Write-Host "Error: Plugin package could not be generated." -ForegroundColor Red
+    exit 1
+}
 
 # Confirm details
 Write-Host ""
 Write-Host "=========================================" -ForegroundColor Cyan
 Write-Host "Configuration Summary:" -ForegroundColor Cyan
 Write-Host "=========================================" -ForegroundColor Cyan
-Write-Host "Plugin Name:    $PLUGIN_NAME" -ForegroundColor White
+Write-Host "Plugin Name:    $PLUGIN_NAME (sanitized from: $PLUGIN_NAME_RAW)" -ForegroundColor White
 Write-Host "Description:    $PLUGIN_DESC" -ForegroundColor White
 Write-Host "Version:        $PLUGIN_VERSION" -ForegroundColor White
 Write-Host "Author:         $PLUGIN_AUTHOR" -ForegroundColor White
-Write-Host "Group:          $PLUGIN_GROUP" -ForegroundColor White
+Write-Host "Group:          $PLUGIN_GROUP (sanitized from: $PLUGIN_GROUP_RAW)" -ForegroundColor White
 Write-Host "Package:        $PLUGIN_GROUP.$PLUGIN_PACKAGE" -ForegroundColor White
 if ([string]::IsNullOrWhiteSpace($GITHUB_REPO)) {
     Write-Host "Repo Check:     disabled" -ForegroundColor White
@@ -48,6 +146,14 @@ if ($CONFIRM -notmatch '^[Yy]$') {
 
 Write-Host ""
 Write-Host "Configuring plugin..." -ForegroundColor Green
+
+# Prepare escaped strings for regex replacements
+$ESCAPED_GROUP_PACKAGE = Escape-RegexReplacement -Input "$PLUGIN_GROUP.$PLUGIN_PACKAGE"
+$ESCAPED_PLUGIN_NAME = Escape-RegexReplacement -Input $PLUGIN_NAME
+$ESCAPED_DESC = Escape-RegexReplacement -Input $PLUGIN_DESC
+$ESCAPED_AUTHOR = Escape-RegexReplacement -Input $PLUGIN_AUTHOR
+$ESCAPED_VERSION = Escape-RegexReplacement -Input $PLUGIN_VERSION
+$ESCAPED_GITHUB_REPO = Escape-RegexReplacement -Input $GITHUB_REPO
 
 # Update gradle.properties
 Write-Host "Updating gradle.properties..." -ForegroundColor Yellow
@@ -80,20 +186,21 @@ $gradleProps | Set-Content "gradle.properties"
 # Update settings.gradle.kts
 Write-Host "Updating settings.gradle.kts..." -ForegroundColor Yellow
 $settingsGradle = Get-Content "settings.gradle.kts" -Raw
-$settingsGradle = $settingsGradle -replace 'rootProject\.name = ".*"', "rootProject.name = `"$PLUGIN_NAME`""
+$settingsGradle = $settingsGradle -replace 'rootProject\.name = ".*"', "rootProject.name = `"$ESCAPED_PLUGIN_NAME`""
 Set-Content "settings.gradle.kts" -Value $settingsGradle -NoNewline
 
 # Update build.gradle.kts
 Write-Host "Updating build.gradle.kts..." -ForegroundColor Yellow
 $buildGradle = Get-Content "build.gradle.kts" -Raw
-$buildGradle = $buildGradle -replace 'application\.mainClass = ".*"', "application.mainClass = `"$PLUGIN_GROUP.$PLUGIN_PACKAGE.Main`""
-$buildGradle = $buildGradle -replace 'relocate\("com\.tcoded\.folialib", "\$\{project\.property\("group"\)\}\.lib\.folialib"\)', "relocate(`"com.tcoded.folialib`", `"$PLUGIN_GROUP.$PLUGIN_PACKAGE.lib.folialib`")"
+$buildGradle = $buildGradle -replace 'application\.mainClass = ".*"', "application.mainClass = `"$ESCAPED_GROUP_PACKAGE.Main`""
+$escapedRelocatePattern = Escape-RegexPattern -Input 'relocate("com.tcoded.folialib", "${project.property("group")}.lib.folialib")'
+$buildGradle = $buildGradle -replace $escapedRelocatePattern, "relocate(`"com.tcoded.folialib`", `"$ESCAPED_GROUP_PACKAGE.lib.folialib`")"
 Set-Content "build.gradle.kts" -Value $buildGradle -NoNewline
 
 # Update plugin.yml
 Write-Host "Updating plugin.yml..." -ForegroundColor Yellow
 $pluginYml = Get-Content "src\main\resources\plugin.yml" -Raw
-$pluginYml = $pluginYml -replace 'main: .*', "main: $PLUGIN_GROUP.$PLUGIN_PACKAGE.Main"
+$pluginYml = $pluginYml -replace 'main: .*', "main: $ESCAPED_GROUP_PACKAGE.Main"
 Set-Content "src\main\resources\plugin.yml" -Value $pluginYml -NoNewline
 
 # Update GitHub Actions workflow
@@ -117,7 +224,8 @@ if (Test-Path $workflowPath) {
     }
     $updatedWorkflow | Set-Content $workflowPath
 }
-
+escapedOldPackage = Escape-RegexPattern -Input 'package dev.modpotato.PluginNameHere;'
+$mainJava = $mainJava -replace $escapedOldPackage, "package $ESCAPED_GROUP
 # Create new directory structure
 Write-Host "Refactoring directory structure..." -ForegroundColor Yellow
 $NEW_DIR = "src\main\java\$($PLUGIN_GROUP.Replace('.', '\'))\$PLUGIN_PACKAGE"
@@ -126,7 +234,8 @@ New-Item -ItemType Directory -Path $NEW_DIR -Force | Out-Null
 # Update Main.java package declaration and move it
 Write-Host "Updating Main.java..." -ForegroundColor Yellow
 $mainJava = Get-Content "src\main\java\dev\modpotato\PluginNameHere\Main.java" -Raw
-$mainJava = $mainJava -replace 'package dev\.modpotato\.PluginNameHere;', "package $PLUGIN_GROUP.$PLUGIN_PACKAGE;"
+$escapedReadmePattern = Escape-RegexPattern -Input '# PluginNameHere'
+$readme = $readme -replace $escapedReadmePattern, "# $ESCAPED_ato\.PluginNameHere;', "package $PLUGIN_GROUP.$PLUGIN_PACKAGE;"
 Set-Content "$NEW_DIR\Main.java" -Value $mainJava -NoNewline
 
 # Remove old directory structure
